@@ -1,0 +1,16 @@
+{
+  "short_name": "Kaggadu",
+  "name": "Kaggadu Adventures — Live with Nature",
+  "icons": [
+    {
+      "src": "/logo.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#143d2b",
+  "theme_color": "#143d2b",
+  "display": "standalone",
+  "orientation": "portrait"
+}
