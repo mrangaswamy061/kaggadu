@@ -13,13 +13,17 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static directory for uploaded images
+// Static directory for uploaded images (for local environment)
 const UPLOADS_DIR = path.join(__dirname, 'public/uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Read-only filesystem, using in-memory upload handling.');
 }
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -28,10 +32,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage, 
-  limits: { fileSize: 8 * 1024 * 1024 } // 8MB limit
+  limits: { fileSize: 25 * 1024 * 1024 } // 25MB limit for high-res mobile photos
 });
 
-// Admin Secret Key (can be overriden by process.env.ADMIN_PASSWORD)
+// Admin Secret Key
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kaggadu2020';
 
 // Helper: Generate Sequential Booking ID in specific series (e.g. KG-2026-0001)
@@ -42,10 +46,11 @@ function generateBookingId(db) {
   return `KG-${year}-${seq}`;
 }
 
-// REST API ROUTES
+// Router to handle both /api/* and /* paths seamlessly on Vercel Serverless
+const apiRouter = express.Router();
 
 // --- ADMIN AUTH ---
-app.post('/api/admin/login', (req, res) => {
+apiRouter.post('/admin/login', (req, res) => {
   const { password } = req.body || {};
   const pass = (password || '').toString().trim();
   const target = (ADMIN_PASSWORD || 'kaggadu2020').toString().trim();
@@ -56,12 +61,12 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // --- SETTINGS ---
-app.get('/api/settings', (req, res) => {
+apiRouter.get('/settings', (req, res) => {
   const db = readDB();
-  res.json(db.settings);
+  res.json(db.settings || {});
 });
 
-app.put('/api/settings', (req, res) => {
+apiRouter.put('/settings', (req, res) => {
   const db = readDB();
   db.settings = { ...db.settings, ...req.body };
   writeDB(db);
@@ -69,7 +74,7 @@ app.put('/api/settings', (req, res) => {
 });
 
 // --- TREKS ---
-app.get('/api/treks', (req, res) => {
+apiRouter.get('/treks', (req, res) => {
   const db = readDB();
   let treks = db.treks || [];
   
@@ -99,14 +104,14 @@ app.get('/api/treks', (req, res) => {
   res.json(treks);
 });
 
-app.get('/api/treks/:slug', (req, res) => {
+apiRouter.get('/treks/:slug', (req, res) => {
   const db = readDB();
   const trek = db.treks.find(t => t.slug === req.params.slug || t.id === req.params.slug);
   if (!trek) return res.status(404).json({ message: 'Trek not found' });
   res.json(trek);
 });
 
-app.post('/api/treks', (req, res) => {
+apiRouter.post('/treks', (req, res) => {
   const db = readDB();
   const nameSlug = (req.body.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
   const trekId = req.body.id || req.body.slug || nameSlug || ('trek-' + Date.now());
@@ -135,7 +140,7 @@ app.post('/api/treks', (req, res) => {
   res.status(201).json(newTrek);
 });
 
-app.put('/api/treks/:id', (req, res) => {
+apiRouter.put('/treks/:id', (req, res) => {
   const db = readDB();
   const targetId = req.params.id;
   const idx = db.treks.findIndex(t => t.id === targetId || t.slug === targetId);
@@ -152,16 +157,16 @@ app.put('/api/treks/:id', (req, res) => {
   res.json(db.treks[idx]);
 });
 
-app.delete('/api/treks/:id', (req, res) => {
+apiRouter.delete('/treks/:id', (req, res) => {
   const db = readDB();
-  db.treks = db.treks.filter(t => t.id !== req.params.id);
+  db.treks = db.treks.filter(t => t.id !== req.params.id && t.slug !== req.params.id);
   db.batches = db.batches.filter(b => b.trekId !== req.params.id);
   writeDB(db);
   res.json({ success: true });
 });
 
 // --- BATCHES ---
-app.get('/api/batches', (req, res) => {
+apiRouter.get('/batches', (req, res) => {
   const db = readDB();
   let batches = db.batches || [];
   if (req.query.trekId) {
@@ -170,7 +175,7 @@ app.get('/api/batches', (req, res) => {
   res.json(batches);
 });
 
-app.post('/api/batches', (req, res) => {
+apiRouter.post('/batches', (req, res) => {
   const db = readDB();
   const newBatch = {
     id: 'batch-' + Date.now(),
@@ -184,7 +189,7 @@ app.post('/api/batches', (req, res) => {
   res.status(201).json(newBatch);
 });
 
-app.put('/api/batches/:id', (req, res) => {
+apiRouter.put('/batches/:id', (req, res) => {
   const db = readDB();
   const idx = db.batches.findIndex(b => b.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'Batch not found' });
@@ -193,7 +198,7 @@ app.put('/api/batches/:id', (req, res) => {
   res.json(db.batches[idx]);
 });
 
-app.delete('/api/batches/:id', (req, res) => {
+apiRouter.delete('/batches/:id', (req, res) => {
   const db = readDB();
   db.batches = db.batches.filter(b => b.id !== req.params.id);
   writeDB(db);
@@ -201,7 +206,7 @@ app.delete('/api/batches/:id', (req, res) => {
 });
 
 // --- BOOKINGS ---
-app.get('/api/bookings', (req, res) => {
+apiRouter.get('/bookings', (req, res) => {
   const db = readDB();
   let bookings = db.bookings || [];
   const { trekId, status, search } = req.query;
@@ -218,14 +223,14 @@ app.get('/api/bookings', (req, res) => {
   res.json(bookings.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
 });
 
-app.get('/api/bookings/:id', (req, res) => {
+apiRouter.get('/bookings/:id', (req, res) => {
   const db = readDB();
   const booking = db.bookings.find(b => b.id === req.params.id);
   if (!booking) return res.status(404).json({ message: 'Booking not found' });
   res.json(booking);
 });
 
-app.post('/api/bookings', (req, res) => {
+apiRouter.post('/bookings', (req, res) => {
   const db = readDB();
   const bookingId = generateBookingId(db);
 
@@ -239,7 +244,6 @@ app.post('/api/bookings', (req, res) => {
 
   db.bookings.push(newBooking);
 
-  // Update batch seat count if batchId matches
   if (newBooking.batchId) {
     const batch = db.batches.find(b => b.id === newBooking.batchId);
     if (batch) {
@@ -250,7 +254,6 @@ app.post('/api/bookings', (req, res) => {
     }
   }
 
-  // Create internal notification
   db.notifications.push({
     id: 'n-' + Date.now(),
     type: 'New Booking',
@@ -262,7 +265,7 @@ app.post('/api/bookings', (req, res) => {
   res.status(201).json(newBooking);
 });
 
-app.patch('/api/bookings/:id/status', (req, res) => {
+apiRouter.patch('/bookings/:id/status', (req, res) => {
   const db = readDB();
   const booking = db.bookings.find(b => b.id === req.params.id);
   if (!booking) return res.status(404).json({ message: 'Booking not found' });
@@ -271,11 +274,11 @@ app.patch('/api/bookings/:id/status', (req, res) => {
   if (status) booking.status = status;
   if (paymentStatus) booking.paymentStatus = paymentStatus;
 
-  // Log status notification trigger
-  const notificationMsg = `Booking ${booking.id} status updated to ${booking.status}. Notification sent to ${booking.fullName} (${booking.phone}).`;
+  let notificationMsg = `Booking ${booking.id} status updated to ${booking.status}.`;
+  
   db.notifications.push({
     id: 'n-' + Date.now(),
-    type: `Booking ${booking.status}`,
+    type: 'Booking Update',
     message: notificationMsg,
     timestamp: new Date().toISOString()
   });
@@ -284,8 +287,8 @@ app.patch('/api/bookings/:id/status', (req, res) => {
   res.json({ success: true, booking, notificationSent: true, notificationMsg });
 });
 
-// --- UPLOAD ---
-app.post('/api/upload', upload.single('image'), (req, res) => {
+// --- UPLOAD (MEMORY BUFFER TO BASE64 DATA URL FOR VERCEL COMPATIBILITY) ---
+apiRouter.post('/upload', upload.single('image'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
     const mimeType = req.file.mimetype || 'image/jpeg';
@@ -299,20 +302,26 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
 });
 
 // --- GALLERY ---
-app.get('/api/gallery', (req, res) => {
+apiRouter.get('/gallery', (req, res) => {
   const db = readDB();
   res.json(db.gallery || []);
 });
 
-app.post('/api/gallery', (req, res) => {
+apiRouter.post('/gallery', (req, res) => {
   const db = readDB();
-  const item = { id: 'g-' + Date.now(), ...req.body };
-  db.gallery.push(item);
+  const newPhoto = {
+    id: 'g-' + Date.now(),
+    title: req.body.title || 'Trail Photo',
+    category: req.body.category || 'Treks',
+    image: req.body.image || '/images/hero_western_ghats.jpg',
+    ...req.body
+  };
+  db.gallery.unshift(newPhoto);
   writeDB(db);
-  res.status(201).json(item);
+  res.status(201).json(newPhoto);
 });
 
-app.delete('/api/gallery/:id', (req, res) => {
+apiRouter.delete('/gallery/:id', (req, res) => {
   const db = readDB();
   db.gallery = db.gallery.filter(g => g.id !== req.params.id);
   writeDB(db);
@@ -320,20 +329,29 @@ app.delete('/api/gallery/:id', (req, res) => {
 });
 
 // --- EVENTS ---
-app.get('/api/events', (req, res) => {
+apiRouter.get('/events', (req, res) => {
   const db = readDB();
   res.json(db.events || []);
 });
 
-app.post('/api/events', (req, res) => {
+apiRouter.post('/events', (req, res) => {
   const db = readDB();
-  const ev = { id: 'ev-' + Date.now(), status: 'Upcoming', ...req.body };
-  db.events.push(ev);
+  const newEvent = {
+    id: 'e-' + Date.now(),
+    title: req.body.title || 'Community Event',
+    date: req.body.date || 'Upcoming',
+    location: req.body.location || 'Chikkamagaluru',
+    description: req.body.description || '',
+    image: req.body.image || '/images/hero_western_ghats.jpg',
+    status: req.body.status || 'Upcoming',
+    ...req.body
+  };
+  db.events.unshift(newEvent);
   writeDB(db);
-  res.status(201).json(ev);
+  res.status(201).json(newEvent);
 });
 
-app.delete('/api/events/:id', (req, res) => {
+apiRouter.delete('/events/:id', (req, res) => {
   const db = readDB();
   db.events = db.events.filter(e => e.id !== req.params.id);
   writeDB(db);
@@ -341,20 +359,25 @@ app.delete('/api/events/:id', (req, res) => {
 });
 
 // --- REVIEWS ---
-app.get('/api/reviews', (req, res) => {
+apiRouter.get('/reviews', (req, res) => {
   const db = readDB();
   res.json(db.reviews || []);
 });
 
-app.post('/api/reviews', (req, res) => {
+apiRouter.post('/reviews', (req, res) => {
   const db = readDB();
-  const r = { id: 'r-' + Date.now(), date: 'Recently', ...req.body };
-  db.reviews.push(r);
+  const newReview = {
+    id: 'r-' + Date.now(),
+    rating: 5,
+    date: new Date().toISOString().split('T')[0],
+    ...req.body
+  };
+  db.reviews.unshift(newReview);
   writeDB(db);
-  res.status(201).json(r);
+  res.status(201).json(newReview);
 });
 
-app.delete('/api/reviews/:id', (req, res) => {
+apiRouter.delete('/reviews/:id', (req, res) => {
   const db = readDB();
   db.reviews = db.reviews.filter(r => r.id !== req.params.id);
   writeDB(db);
@@ -362,20 +385,23 @@ app.delete('/api/reviews/:id', (req, res) => {
 });
 
 // --- FAQS ---
-app.get('/api/faqs', (req, res) => {
+apiRouter.get('/faqs', (req, res) => {
   const db = readDB();
   res.json(db.faqs || []);
 });
 
-app.post('/api/faqs', (req, res) => {
+apiRouter.post('/faqs', (req, res) => {
   const db = readDB();
-  const f = { id: 'f-' + Date.now(), ...req.body };
-  db.faqs.push(f);
+  const newFaq = {
+    id: 'faq-' + Date.now(),
+    ...req.body
+  };
+  db.faqs.push(newFaq);
   writeDB(db);
-  res.status(201).json(f);
+  res.status(201).json(newFaq);
 });
 
-app.delete('/api/faqs/:id', (req, res) => {
+apiRouter.delete('/faqs/:id', (req, res) => {
   const db = readDB();
   db.faqs = db.faqs.filter(f => f.id !== req.params.id);
   writeDB(db);
@@ -383,15 +409,19 @@ app.delete('/api/faqs/:id', (req, res) => {
 });
 
 // --- NOTIFICATIONS ---
-app.get('/api/notifications', (req, res) => {
+apiRouter.get('/notifications', (req, res) => {
   const db = readDB();
-  res.json((db.notifications || []).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+  res.json(db.notifications || []);
 });
 
-// Export app for Vercel Serverless Function & Start Server if standalone
-if (process.env.NODE_ENV !== 'production' || process.env.RUN_STANDALONE) {
+// Mount router under BOTH /api and / so Vercel Serverless Function rewrites match 100% of requests!
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
+
+// Start server if executed directly
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   app.listen(PORT, () => {
-    console.log(`🌲 Kaggadu Adventures Backend Server running on port ${PORT}`);
+    console.log(`🌲 Kaggadu Adventures Server running on http://localhost:${PORT}`);
   });
 }
 
