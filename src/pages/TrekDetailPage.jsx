@@ -71,6 +71,7 @@ export default function TrekDetailPage() {
           src={trek.image || '/images/hero_western_ghats.jpg'}
           alt={trek.name}
           className="w-full h-full object-cover opacity-80"
+          onError={(e) => { e.target.onerror = null; e.target.src = '/images/hero_western_ghats.jpg'; }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 

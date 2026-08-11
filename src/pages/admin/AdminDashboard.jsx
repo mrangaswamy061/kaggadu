@@ -573,15 +573,23 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {treks.map((t) => (
               <div key={t.id} className="p-4 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3 bg-earth-50/50">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-forest-700 bg-forest-100 px-2 py-0.5 rounded">
-                      {t.difficulty}
-                    </span>
-                    <span className="font-extrabold text-sm text-forest-900">₹{t.price}</span>
+                <div className="flex gap-3 items-center">
+                  <img
+                    src={t.image || '/images/hero_western_ghats.jpg'}
+                    alt={t.name}
+                    className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0"
+                    onError={(e) => { e.target.onerror = null; e.target.src = '/images/hero_western_ghats.jpg'; }}
+                  />
+                  <div className="space-y-0.5 flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-forest-700 bg-forest-100 px-1.5 py-0.2 rounded truncate">
+                        {t.difficulty}
+                      </span>
+                      <span className="font-extrabold text-xs text-forest-900 shrink-0">₹{t.price}</span>
+                    </div>
+                    <h3 className="font-extrabold text-xs text-slate-900 truncate">{t.name}</h3>
+                    <p className="text-[10px] text-slate-500 truncate">{t.location} • {t.distance}</p>
                   </div>
-                  <h3 className="font-extrabold text-base text-slate-900">{t.name}</h3>
-                  <p className="text-xs text-slate-500">{t.location} • {t.distance}</p>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
