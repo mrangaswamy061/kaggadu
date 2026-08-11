@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Lock, LogOut, Check, X, AlertTriangle, Search, Plus, Trash2, Edit, Eye, MessageCircle, Calendar, Image as ImageIcon, Star, HelpCircle, Bell, Settings, FileText, CheckCircle2, UserCheck, Upload, Compass, MapPin
 } from 'lucide-react';
+import { compressImage } from '../../utils/imageCompressor.js';
 
 export default function AdminDashboard() {
   const [token, setToken] = useState(localStorage.getItem('kaggadu_admin_token') || '');
@@ -137,19 +138,30 @@ export default function AdminDashboard() {
     }
   };
 
-  // Image Upload Helper
+  // Image Upload Helper (Uses client-side canvas compression for 100% Vercel & speed compatibility)
   const handleImageUpload = async (e, callback) => {
     const file = e.target.files[0];
     if (!file) return;
-    const formData = new FormData();
-    formData.append('image', file);
     setUploading(true);
     try {
+      // 1. Instant client-side downscale to 1200px / 0.75 JPEG (~250KB)
+      const compressedDataUrl = await compressImage(file);
+      if (compressedDataUrl) {
+        callback(compressedDataUrl);
+        return;
+      }
+
+      // 2. Server upload fallback
+      const formData = new FormData();
+      formData.append('image', file);
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
+      const responseText = await res.text();
+      let data = {};
+      try { data = JSON.parse(responseText); } catch(e){}
       if (data.url) callback(data.url);
     } catch (err) {
       console.error('Upload error:', err);
+      alert('Photo upload failed: ' + (err.message || 'Error processing image'));
     } finally {
       setUploading(false);
     }
@@ -194,17 +206,25 @@ export default function AdminDashboard() {
         body: JSON.stringify(payload)
       });
 
+      const responseText = await res.text();
+      let responseData = {};
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (jsonErr) {
+        responseData = { message: responseText };
+      }
+
       if (res.ok) {
         setShowTrekModal(false);
         setEditingTrek(null);
         await fetchAdminData();
+        alert('Trek saved successfully!');
       } else {
-        const data = await res.json();
-        alert(`Save failed: ${data.message || 'Server error'}`);
+        alert(`Save failed (${res.status}): ${responseData.message || res.statusText || 'Server error'}`);
       }
     } catch (err) {
       console.error('Save trek failed:', err);
-      alert('Save trek error: Unable to connect to server.');
+      alert('Save trek error: ' + (err.message || 'Unable to communicate with server.'));
     }
   };
 

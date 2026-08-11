@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRoute, useLocation, Link } from 'wouter';
 import { Check, ShieldCheck, ArrowRight, ArrowLeft, Copy, Upload, AlertCircle, Sparkles, Phone, User, Users, MapPin, CreditCard } from 'lucide-react';
+import { compressImage } from '../utils/imageCompressor.js';
 
 export default function BookingPage() {
   const [, params] = useRoute('/book/:slug');
@@ -76,10 +77,16 @@ export default function BookingPage() {
     const file = e.target.files[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('image', file);
     setUploading(true);
     try {
+      const compressedDataUrl = await compressImage(file);
+      if (compressedDataUrl) {
+        setScreenshotUrl(compressedDataUrl);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', file);
       const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData
