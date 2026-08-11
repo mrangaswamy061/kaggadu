@@ -172,21 +172,39 @@ export default function AdminDashboard() {
   // Save / Update Trek
   const handleSaveTrek = async (e) => {
     e.preventDefault();
+    if (!trekForm.name?.trim()) {
+      alert('Please enter a Trek Name');
+      return;
+    }
+
     try {
+      const generatedSlug = (trekForm.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+      const payload = {
+        ...trekForm,
+        id: editingTrek ? editingTrek.id : (trekForm.id || trekForm.slug || generatedSlug),
+        slug: editingTrek ? editingTrek.slug : (trekForm.slug || generatedSlug),
+        price: parseInt(trekForm.price) || 3499
+      };
+
       const method = editingTrek ? 'PUT' : 'POST';
-      const url = editingTrek ? `/api/treks/${editingTrek.id}` : '/api/treks';
+      const url = editingTrek ? `/api/treks/${editingTrek.id || editingTrek.slug}` : '/api/treks';
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(trekForm)
+        body: JSON.stringify(payload)
       });
+
       if (res.ok) {
         setShowTrekModal(false);
         setEditingTrek(null);
-        fetchAdminData();
+        await fetchAdminData();
+      } else {
+        const data = await res.json();
+        alert(`Save failed: ${data.message || 'Server error'}`);
       }
     } catch (err) {
       console.error('Save trek failed:', err);
+      alert('Save trek error: Unable to connect to server.');
     }
   };
 

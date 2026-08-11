@@ -114,8 +114,12 @@ app.get('/api/treks/:slug', (req, res) => {
 
 app.post('/api/treks', (req, res) => {
   const db = readDB();
+  const nameSlug = (req.body.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+  const trekId = req.body.id || req.body.slug || nameSlug || ('trek-' + Date.now());
+  
   const newTrek = {
-    id: req.body.slug || 'trek-' + Date.now(),
+    id: trekId,
+    slug: trekId,
     published: true,
     highlights: [],
     itinerary: [],
@@ -125,15 +129,30 @@ app.post('/api/treks', (req, res) => {
     faqs: [],
     ...req.body
   };
-  db.treks.push(newTrek);
+
+  const existingIdx = db.treks.findIndex(t => t.id === trekId || t.slug === trekId);
+  if (existingIdx !== -1) {
+    db.treks[existingIdx] = { ...db.treks[existingIdx], ...newTrek };
+  } else {
+    db.treks.push(newTrek);
+  }
+
   writeDB(db);
   res.status(201).json(newTrek);
 });
 
 app.put('/api/treks/:id', (req, res) => {
   const db = readDB();
-  const idx = db.treks.findIndex(t => t.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ message: 'Trek not found' });
+  const targetId = req.params.id;
+  const idx = db.treks.findIndex(t => t.id === targetId || t.slug === targetId);
+  if (idx === -1) {
+    const nameSlug = (req.body.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+    const trekId = targetId || nameSlug || ('trek-' + Date.now());
+    const newTrek = { id: trekId, slug: trekId, published: true, ...req.body };
+    db.treks.push(newTrek);
+    writeDB(db);
+    return res.json(newTrek);
+  }
   db.treks[idx] = { ...db.treks[idx], ...req.body };
   writeDB(db);
   res.json(db.treks[idx]);
