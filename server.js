@@ -6,8 +6,7 @@ import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { readDB, writeDB } from './src/db/db.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const cwd = process.cwd();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -17,7 +16,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static directory for uploaded images (for local environment)
-const UPLOADS_DIR = path.join(__dirname, 'public/uploads');
+const UPLOADS_DIR = path.join(cwd, 'public', 'uploads');
 try {
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -26,7 +25,7 @@ try {
   console.warn('Read-only filesystem, using in-memory upload handling.');
 }
 app.use('/uploads', express.static(UPLOADS_DIR));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(cwd, 'public')));
 
 // Configure Multer storage (Memory storage for 100% Vercel & serverless compatibility)
 const storage = multer.memoryStorage();

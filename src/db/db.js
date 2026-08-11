@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const isVercel = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
-const DATA_DIR = isVercel ? path.join('/tmp', 'data') : path.join(__dirname, '../../data');
+const cwd = process.cwd();
+const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isVercel ? path.join('/tmp', 'data') : path.join(cwd, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
-const ORIGINAL_DATA_FILE = path.join(__dirname, '../../data/store.json');
+const ORIGINAL_DATA_FILE = path.join(cwd, 'data', 'store.json');
 
 // Initial seed data for Kaggadu Adventures
 const INITIAL_DATA = {
