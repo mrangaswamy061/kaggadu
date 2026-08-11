@@ -474,24 +474,35 @@ function ensureDataFile() {
   }
 }
 
+let inMemoryDB = null;
+
 export function readDB() {
+  if (inMemoryDB) {
+    return inMemoryDB;
+  }
   ensureDataFile();
   try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(raw);
+    if (fs.existsSync(DATA_FILE)) {
+      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+      inMemoryDB = JSON.parse(raw);
+      return inMemoryDB;
+    }
   } catch (err) {
-    console.error('Error reading DB:', err);
-    return INITIAL_DATA;
+    console.error('Error reading DB file, using INITIAL_DATA:', err.message);
   }
+  
+  inMemoryDB = JSON.parse(JSON.stringify(INITIAL_DATA));
+  return inMemoryDB;
 }
 
 export function writeDB(data) {
-  ensureDataFile();
+  inMemoryDB = data;
   try {
+    ensureDataFile();
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   } catch (err) {
-    console.error('Error writing DB:', err);
-    return false;
+    console.warn('Warning: Disk write failed, but in-memory DB updated:', err.message);
+    return true;
   }
 }

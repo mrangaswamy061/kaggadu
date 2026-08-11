@@ -112,49 +112,59 @@ apiRouter.get('/treks/:slug', (req, res) => {
 });
 
 apiRouter.post('/treks', (req, res) => {
-  const db = readDB();
-  const nameSlug = (req.body.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
-  const trekId = req.body.id || req.body.slug || nameSlug || ('trek-' + Date.now());
-  
-  const newTrek = {
-    id: trekId,
-    slug: trekId,
-    published: true,
-    highlights: [],
-    itinerary: [],
-    included: [],
-    excluded: [],
-    checklist: [],
-    faqs: [],
-    ...req.body
-  };
+  try {
+    const db = readDB();
+    const nameSlug = (req.body.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+    const trekId = req.body.id || req.body.slug || nameSlug || ('trek-' + Date.now());
+    
+    const newTrek = {
+      id: trekId,
+      slug: trekId,
+      published: true,
+      highlights: [],
+      itinerary: [],
+      included: [],
+      excluded: [],
+      checklist: [],
+      faqs: [],
+      ...req.body
+    };
 
-  const existingIdx = db.treks.findIndex(t => t.id === trekId || t.slug === trekId);
-  if (existingIdx !== -1) {
-    db.treks[existingIdx] = { ...db.treks[existingIdx], ...newTrek };
-  } else {
-    db.treks.push(newTrek);
+    const existingIdx = db.treks.findIndex(t => t.id === trekId || t.slug === trekId);
+    if (existingIdx !== -1) {
+      db.treks[existingIdx] = { ...db.treks[existingIdx], ...newTrek };
+    } else {
+      db.treks.push(newTrek);
+    }
+
+    writeDB(db);
+    return res.status(201).json(newTrek);
+  } catch (err) {
+    console.error('Error saving trek POST:', err);
+    return res.status(500).json({ message: 'Server processing error: ' + (err.message || 'Unknown') });
   }
-
-  writeDB(db);
-  res.status(201).json(newTrek);
 });
 
 apiRouter.put('/treks/:id', (req, res) => {
-  const db = readDB();
-  const targetId = req.params.id;
-  const idx = db.treks.findIndex(t => t.id === targetId || t.slug === targetId);
-  if (idx === -1) {
-    const nameSlug = (req.body.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
-    const trekId = targetId || nameSlug || ('trek-' + Date.now());
-    const newTrek = { id: trekId, slug: trekId, published: true, ...req.body };
-    db.treks.push(newTrek);
+  try {
+    const db = readDB();
+    const targetId = req.params.id;
+    const idx = db.treks.findIndex(t => t.id === targetId || t.slug === targetId);
+    if (idx === -1) {
+      const nameSlug = (req.body.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+      const trekId = targetId || nameSlug || ('trek-' + Date.now());
+      const newTrek = { id: trekId, slug: trekId, published: true, ...req.body };
+      db.treks.push(newTrek);
+      writeDB(db);
+      return res.json(newTrek);
+    }
+    db.treks[idx] = { ...db.treks[idx], ...req.body };
     writeDB(db);
-    return res.json(newTrek);
+    return res.json(db.treks[idx]);
+  } catch (err) {
+    console.error('Error updating trek PUT:', err);
+    return res.status(500).json({ message: 'Server update error: ' + (err.message || 'Unknown') });
   }
-  db.treks[idx] = { ...db.treks[idx], ...req.body };
-  writeDB(db);
-  res.json(db.treks[idx]);
 });
 
 apiRouter.delete('/treks/:id', (req, res) => {
