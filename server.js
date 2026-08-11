@@ -40,10 +40,12 @@ const upload = multer({ storage: storage });
 // Admin Secret Key (can be overriden by process.env.ADMIN_PASSWORD)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kaggadu2020';
 
-// Helper: Generate Booking ID
-function generateBookingId() {
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `KG-2026-${rand}`;
+// Helper: Generate Sequential Booking ID in specific series (e.g. KG-2026-0001)
+function generateBookingId(db) {
+  const count = (db.bookings || []).length + 1;
+  const seq = String(count).padStart(4, '0');
+  const year = new Date().getFullYear();
+  return `KG-${year}-${seq}`;
 }
 
 // REST API ROUTES
@@ -212,7 +214,7 @@ app.get('/api/bookings/:id', (req, res) => {
 
 app.post('/api/bookings', (req, res) => {
   const db = readDB();
-  const bookingId = generateBookingId();
+  const bookingId = generateBookingId(db);
 
   const newBooking = {
     id: bookingId,
