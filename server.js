@@ -24,18 +24,12 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Configure Multer storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, 'kaggadu-' + uniqueSuffix + ext);
-  }
+// Configure Multer storage (Memory storage for 100% Vercel & serverless compatibility)
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage: storage, 
+  limits: { fileSize: 8 * 1024 * 1024 } // 8MB limit
 });
-const upload = multer({ storage: storage });
 
 // Admin Secret Key (can be overriden by process.env.ADMIN_PASSWORD)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kaggadu2020';
@@ -292,9 +286,16 @@ app.patch('/api/bookings/:id/status', (req, res) => {
 
 // --- UPLOAD ---
 app.post('/api/upload', upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const publicUrl = `/uploads/${req.file.filename}`;
-  res.json({ success: true, url: publicUrl });
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const base64 = req.file.buffer.toString('base64');
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+    res.json({ success: true, url: dataUrl });
+  } catch (err) {
+    console.error('Upload handler error:', err);
+    res.status(500).json({ message: 'File upload processing failed' });
+  }
 });
 
 // --- GALLERY ---
