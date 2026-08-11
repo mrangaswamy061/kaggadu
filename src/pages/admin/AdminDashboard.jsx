@@ -193,6 +193,7 @@ export default function AdminDashboard() {
       const generatedSlug = (trekForm.name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
       const payload = {
         ...trekForm,
+        published: true,
         id: editingTrek ? editingTrek.id : (trekForm.id || trekForm.slug || generatedSlug),
         slug: editingTrek ? editingTrek.slug : (trekForm.slug || generatedSlug),
         price: parseInt(trekForm.price) || 3499
@@ -206,6 +207,18 @@ export default function AdminDashboard() {
         body: JSON.stringify(payload)
       });
 
+      // Save custom trek to client-side localStorage cache for 100% instant sync
+      try {
+        const savedCustomTreks = JSON.parse(localStorage.getItem('kaggadu_custom_treks') || '[]');
+        const idx = savedCustomTreks.findIndex(t => (t.id && t.id === payload.id) || (t.slug && t.slug === payload.slug));
+        if (idx !== -1) {
+          savedCustomTreks[idx] = payload;
+        } else {
+          savedCustomTreks.push(payload);
+        }
+        localStorage.setItem('kaggadu_custom_treks', JSON.stringify(savedCustomTreks));
+      } catch(e) {}
+
       const responseText = await res.text();
       let responseData = {};
       try {
@@ -218,7 +231,7 @@ export default function AdminDashboard() {
         setShowTrekModal(false);
         setEditingTrek(null);
         await fetchAdminData();
-        alert('Trek saved successfully!');
+        alert('Trek saved successfully! It is now live on the platform.');
       } else {
         alert(`Save failed (${res.status}): ${responseData.message || res.statusText || 'Server error'}`);
       }

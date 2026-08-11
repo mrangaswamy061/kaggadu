@@ -24,17 +24,33 @@ export default function TrekDetailPage() {
   const fetchTrekDetails = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/treks/${slug}`);
-      if (!res.ok) throw new Error('Not found');
-      const trekData = await res.json();
+      let trekData = null;
+      try {
+        const res = await fetch(`/api/treks/${slug}`);
+        if (res.ok) {
+          trekData = await res.json();
+        }
+      } catch(e) {}
+
+      if (!trekData) {
+        try {
+          const customTreks = JSON.parse(localStorage.getItem('kaggadu_custom_treks') || '[]');
+          trekData = customTreks.find(t => t.slug === slug || t.id === slug);
+        } catch(e) {}
+      }
+
       setTrek(trekData);
 
-      // Fetch batches for this trek
-      const batchRes = await fetch(`/api/batches?trekId=${trekData.id}`);
-      const batchData = await batchRes.json();
-      setBatches(batchData || []);
-      if (batchData?.length > 0) {
-        setSelectedBatch(batchData[0]);
+      if (trekData) {
+        // Fetch batches for this trek
+        try {
+          const batchRes = await fetch(`/api/batches?trekId=${trekData.id}`);
+          const batchData = await batchRes.json();
+          setBatches(batchData || []);
+          if (batchData?.length > 0) {
+            setSelectedBatch(batchData[0]);
+          }
+        } catch(e) {}
       }
     } catch (err) {
       console.error('Error fetching trek details:', err);

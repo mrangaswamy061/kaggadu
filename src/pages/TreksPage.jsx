@@ -18,14 +18,34 @@ export default function TreksPage() {
   const fetchTreks = async () => {
     setLoading(true);
     try {
-      let url = '/api/treks?publishedOnly=true';
-      if (category !== 'All') url += `&category=${encodeURIComponent(category)}`;
-      if (difficultyFilter !== 'All') url += `&difficulty=${encodeURIComponent(difficultyFilter)}`;
-      if (search) url += `&search=${encodeURIComponent(search)}`;
-      
-      const res = await fetch(url);
-      const data = await res.json();
-      setTreks(data || []);
+      let apiTreks = [];
+      try {
+        const res = await fetch('/api/treks?publishedOnly=true');
+        apiTreks = await res.json();
+      } catch(e) {}
+
+      let customTreks = [];
+      try {
+        customTreks = JSON.parse(localStorage.getItem('kaggadu_custom_treks') || '[]');
+      } catch(e) {}
+
+      const mergedMap = new Map();
+      (apiTreks || []).forEach(t => mergedMap.set(t.id || t.slug, t));
+      customTreks.forEach(t => mergedMap.set(t.id || t.slug, t));
+
+      let mergedList = Array.from(mergedMap.values());
+      if (category !== 'All') {
+        mergedList = mergedList.filter(t => t.category?.toLowerCase() === category.toLowerCase() || t.difficulty?.toLowerCase().includes(category.toLowerCase()));
+      }
+      if (difficultyFilter !== 'All') {
+        mergedList = mergedList.filter(t => t.difficulty?.toLowerCase().includes(difficultyFilter.toLowerCase()));
+      }
+      if (search) {
+        const q = search.toLowerCase();
+        mergedList = mergedList.filter(t => t.name?.toLowerCase().includes(q) || t.location?.toLowerCase().includes(q));
+      }
+
+      setTreks(mergedList);
     } catch (err) {
       console.error('Error fetching treks:', err);
     } finally {

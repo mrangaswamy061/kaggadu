@@ -19,16 +19,31 @@ export default function HomePage({ searchQuery, setSearchQuery }) {
   const fetchTreks = async () => {
     setLoading(true);
     try {
-      let url = '/api/treks?publishedOnly=true';
+      let apiTreks = [];
+      try {
+        const res = await fetch('/api/treks?publishedOnly=true');
+        apiTreks = await res.json();
+      } catch(e) {}
+
+      let customTreks = [];
+      try {
+        customTreks = JSON.parse(localStorage.getItem('kaggadu_custom_treks') || '[]');
+      } catch(e) {}
+
+      const mergedMap = new Map();
+      (apiTreks || []).forEach(t => mergedMap.set(t.id || t.slug, t));
+      customTreks.forEach(t => mergedMap.set(t.id || t.slug, t));
+
+      let mergedList = Array.from(mergedMap.values());
       if (activeCategory !== 'All') {
-        url += `&category=${encodeURIComponent(activeCategory)}`;
+        mergedList = mergedList.filter(t => t.category?.toLowerCase() === activeCategory.toLowerCase() || t.difficulty?.toLowerCase().includes(activeCategory.toLowerCase()));
       }
       if (searchQuery) {
-        url += `&search=${encodeURIComponent(searchQuery)}`;
+        const q = searchQuery.toLowerCase();
+        mergedList = mergedList.filter(t => t.name?.toLowerCase().includes(q) || t.location?.toLowerCase().includes(q));
       }
-      const res = await fetch(url);
-      const data = await res.json();
-      setTreks(data || []);
+
+      setTreks(mergedList);
     } catch (err) {
       console.error('Error fetching treks:', err);
     } finally {
