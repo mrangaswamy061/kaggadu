@@ -474,25 +474,70 @@ function ensureDataFile() {
   }
 }
 
-let inMemoryDB = null;
-
 export function readDB() {
+  let dbData = null;
   if (inMemoryDB) {
-    return inMemoryDB;
-  }
-  ensureDataFile();
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      inMemoryDB = JSON.parse(raw);
-      return inMemoryDB;
+    dbData = inMemoryDB;
+  } else {
+    ensureDataFile();
+    try {
+      if (fs.existsSync(DATA_FILE)) {
+        const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+        inMemoryDB = JSON.parse(raw);
+        dbData = inMemoryDB;
+      }
+    } catch (err) {
+      console.error('Error reading DB file, using INITIAL_DATA:', err.message);
     }
-  } catch (err) {
-    console.error('Error reading DB file, using INITIAL_DATA:', err.message);
+    
+    if (!dbData) {
+      inMemoryDB = JSON.parse(JSON.stringify(INITIAL_DATA));
+      dbData = inMemoryDB;
+    }
   }
-  
-  inMemoryDB = JSON.parse(JSON.stringify(INITIAL_DATA));
-  return inMemoryDB;
+
+  // Guarantee schema defaults
+  if (!dbData.announcements) dbData.announcements = [
+    {
+      id: 'anc-1',
+      title: '🌧️ Monsoon Trekking Season Open!',
+      message: 'Monsoon bookings for Kudremukha, Netravathi & Kodachadri are now live. Limited batch seats available!',
+      link: '/treks',
+      active: true,
+      badge: 'SEASON UPDATE',
+      createdAt: new Date().toISOString()
+    }
+  ];
+  if (!dbData.offers) dbData.offers = [
+    {
+      id: 'off-1',
+      code: 'KAGGADUGROUP5',
+      title: 'Group Offer - Get ₹300 OFF',
+      description: 'Book for 5 or more trekkers and get instant ₹300 per person discount!',
+      discount: '₹300 OFF',
+      minTrekkers: 5,
+      active: true
+    }
+  ];
+  if (!dbData.activityLogs) dbData.activityLogs = [
+    {
+      id: 'log-1',
+      action: 'System Initialized',
+      details: 'Dynamic Database Engine active for Kaggadu Platform',
+      timestamp: new Date().toISOString()
+    }
+  ];
+  if (!dbData.users) dbData.users = [
+    {
+      id: 'usr-1',
+      name: 'Super Admin',
+      email: 'admin@kaggadu.com',
+      role: 'Super Admin',
+      createdAt: new Date().toISOString()
+    }
+  ];
+
+  return dbData;
 }
 
 export function writeDB(data) {

@@ -23,6 +23,11 @@ export default function AdminDashboard() {
   const [settings, setSettings] = useState({});
   const [financials, setFinancials] = useState(null);
   const [verifyingTxnId, setVerifyingTxnId] = useState('');
+
+  const [announcements, setAnnouncements] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [users, setUsers] = useState([]);
   
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,6 +39,16 @@ export default function AdminDashboard() {
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showFaqModal, setShowFaqModal] = useState(false);
+  const [showAncModal, setShowAncModal] = useState(false);
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewTrek, setPreviewTrek] = useState(null);
+
+  // Form States
+  const [ancForm, setAncForm] = useState({ title: '', message: '', badge: 'SEASON UPDATE', link: '/treks', active: true });
+  const [offerForm, setOfferForm] = useState({ code: '', title: '', description: '', discount: '₹300 OFF', active: true });
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'Trek Coordinator' });
 
   const [editingTrek, setEditingTrek] = useState(null);
 
@@ -112,7 +127,7 @@ export default function AdminDashboard() {
   const fetchAdminData = async () => {
     setLoading(true);
     try {
-      const [bRes, tRes, btRes, gRes, eRes, rRes, fRes, nRes, sRes, finRes] = await Promise.all([
+      const [bRes, tRes, btRes, gRes, eRes, rRes, fRes, nRes, sRes, finRes, ancRes, offRes, logRes, usrRes] = await Promise.all([
         fetch('/api/bookings'),
         fetch('/api/treks'),
         fetch('/api/batches'),
@@ -122,7 +137,11 @@ export default function AdminDashboard() {
         fetch('/api/faqs'),
         fetch('/api/notifications'),
         fetch('/api/settings'),
-        fetch('/api/admin/financials')
+        fetch('/api/admin/financials'),
+        fetch('/api/announcements'),
+        fetch('/api/offers'),
+        fetch('/api/activity-logs'),
+        fetch('/api/users')
       ]);
 
       setBookings(await bRes.json());
@@ -135,6 +154,10 @@ export default function AdminDashboard() {
       setNotifications(await nRes.json());
       setSettings(await sRes.json());
       setFinancials(await finRes.json());
+      setAnnouncements(await ancRes.json());
+      setOffers(await offRes.json());
+      setActivityLogs(await logRes.json());
+      setUsers(await usrRes.json());
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
@@ -268,6 +291,63 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('Save trek failed:', err);
       alert('Save trek error: ' + (err.message || 'Unable to communicate with server.'));
+    }
+  };
+
+  // Save Announcement Banner
+  const handleSaveAnc = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ancForm)
+      });
+      if (res.ok) {
+        setShowAncModal(false);
+        setAncForm({ title: '', message: '', badge: 'SEASON UPDATE', link: '/treks', active: true });
+        fetchAdminData();
+      }
+    } catch (err) {
+      console.error('Save announcement failed:', err);
+    }
+  };
+
+  // Save Promo Offer
+  const handleSaveOffer = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/offers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(offerForm)
+      });
+      if (res.ok) {
+        setShowOfferModal(false);
+        setOfferForm({ code: '', title: '', description: '', discount: '₹300 OFF', active: true });
+        fetchAdminData();
+      }
+    } catch (err) {
+      console.error('Save offer failed:', err);
+    }
+  };
+
+  // Save Staff User
+  const handleSaveUser = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userForm)
+      });
+      if (res.ok) {
+        setShowUserModal(false);
+        setUserForm({ name: '', email: '', role: 'Trek Coordinator' });
+        fetchAdminData();
+      }
+    } catch (err) {
+      console.error('Save user failed:', err);
     }
   };
 
@@ -446,12 +526,16 @@ export default function AdminDashboard() {
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
         {[
+          { id: 'overview', label: '📊 Overview & Activity' },
           { id: 'bookings', label: 'Bookings', badge: pendingBookingsCount },
           { id: 'financials', label: '💰 Payments & Revenue' },
           { id: 'treks', label: 'Treks' },
           { id: 'batches', label: 'Batches' },
+          { id: 'announcements', label: '📢 Banners' },
+          { id: 'offers', label: '🏷️ Offers' },
           { id: 'gallery', label: 'Gallery' },
           { id: 'events', label: 'Events' },
+          { id: 'users', label: '👥 Team Users' },
           { id: 'faqs', label: 'FAQs' },
           { id: 'settings', label: 'Settings' }
         ].map((tab) => (
@@ -474,16 +558,79 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {/* TAB: OVERVIEW & ACTIVITY LOGS */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">Total Active Treks</span>
+              <div className="text-3xl font-black text-forest-900">{treks.length}</div>
+              <span className="text-[10px] text-slate-400">Listed on platform</span>
+            </div>
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 block">Total Revenue</span>
+              <div className="text-3xl font-black text-emerald-600">₹{financials?.totalRevenue?.toLocaleString() || 0}</div>
+              <span className="text-[10px] text-slate-400">Verified PhonePe / UPI</span>
+            </div>
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-600 block">Total Trekkers</span>
+              <div className="text-3xl font-black text-purple-700">{financials?.totalParticipants || 0}</div>
+              <span className="text-[10px] text-slate-400">Confirmed seats</span>
+            </div>
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 block">Pending Requests</span>
+              <div className="text-3xl font-black text-amber-600">{pendingBookingsCount}</div>
+              <span className="text-[10px] text-slate-400">Requires review</span>
+            </div>
+          </div>
+
+          {/* Activity Audit Log Feed */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Recent Admin System Activities</h2>
+                <p className="text-xs text-slate-500">Real-time audit log of content changes and system triggers</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {activityLogs.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No recent system activity recorded.</p>
+              ) : (
+                activityLogs.map((log) => (
+                  <div key={log.id} className="p-3 bg-earth-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs">
+                    <div className="space-y-0.5">
+                      <span className="font-extrabold text-slate-900 block">{log.action}</span>
+                      <span className="text-slate-600 text-[11px]">{log.details}</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: BOOKINGS */}
       {activeTab === 'bookings' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-extrabold text-slate-900">Bookings Management</h2>
-              <p className="text-xs text-slate-500">Approve, reject, or manage participant requests</p>
+              <p className="text-xs text-slate-500">Approve, reject, or export participant records</p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="/api/bookings/export"
+                download="kaggadu_bookings.csv"
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-sm flex items-center gap-1"
+              >
+                <span>📥 EXPORT CSV</span>
+              </a>
               <input
                 type="text"
                 placeholder="Search participant name, ID..."
@@ -887,6 +1034,109 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* TAB: ANNOUNCEMENTS & BANNERS */}
+      {activeTab === 'announcements' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Announcements & Top Banners</h2>
+              <p className="text-xs text-slate-500">Live alerts displayed across homepage top banner</p>
+            </div>
+            <button
+              onClick={() => setShowAncModal(true)}
+              className="px-4 py-2 bg-forest-900 text-white font-bold text-xs rounded-xl flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Banner Alert</span>
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {announcements.map((a) => (
+              <div key={a.id} className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 text-xs bg-earth-50/50">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded-full uppercase">{a.badge}</span>
+                    <span className="font-extrabold text-slate-900 text-sm">{a.title}</span>
+                  </div>
+                  <p className="text-slate-600">{a.message}</p>
+                </div>
+                <button onClick={() => handleDeleteItem('announcements', a.id)} className="text-rose-600 p-1 hover:bg-rose-50 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: PROMOTIONAL OFFERS */}
+      {activeTab === 'offers' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Promotional Offers & Promo Codes</h2>
+              <p className="text-xs text-slate-500">Group discounts and promo code cards</p>
+            </div>
+            <button
+              onClick={() => setShowOfferModal(true)}
+              className="px-4 py-2 bg-forest-900 text-white font-bold text-xs rounded-xl flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Offer</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {offers.map((o) => (
+              <div key={o.id} className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 text-xs bg-earth-50/50">
+                <div className="space-y-1">
+                  <span className="font-mono font-black text-xs text-purple-700 bg-purple-100 px-2 py-0.5 rounded">{o.code || 'NO CODE'}</span>
+                  <h3 className="font-extrabold text-slate-900">{o.title}</h3>
+                  <p className="text-slate-500 text-[11px]">{o.description}</p>
+                </div>
+                <button onClick={() => handleDeleteItem('offers', o.id)} className="text-rose-600 p-1 hover:bg-rose-50 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: TEAM & USERS */}
+      {activeTab === 'users' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Team Staff & Coordinators</h2>
+              <p className="text-xs text-slate-500">Manage admin roles and field trip leads</p>
+            </div>
+            <button
+              onClick={() => setShowUserModal(true)}
+              className="px-4 py-2 bg-forest-900 text-white font-bold text-xs rounded-xl flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Staff User</span>
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {users.map((u) => (
+              <div key={u.id} className="p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between text-xs bg-earth-50/50">
+                <div>
+                  <div className="font-extrabold text-slate-900">{u.name}</div>
+                  <div className="text-slate-500 text-[11px]">{u.email} • <span className="font-bold text-forest-800">{u.role}</span></div>
+                </div>
+                <button onClick={() => handleDeleteItem('users', u.id)} className="text-rose-600 p-1">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* TAB 6: FAQS */}
       {activeTab === 'faqs' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
@@ -1274,6 +1524,116 @@ export default function AdminDashboard() {
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowFaqModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-forest-900 text-white font-bold rounded-xl">Save FAQ</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ANNOUNCEMENT MODAL */}
+      {showAncModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleSaveAnc} className="bg-white rounded-3xl p-6 max-w-md w-full space-y-3 text-xs">
+            <h3 className="font-bold text-base text-slate-900">Add Top Banner Announcement</h3>
+            <input
+              type="text"
+              placeholder="Announcement Headline Title..."
+              required
+              value={ancForm.title}
+              onChange={(e) => setAncForm({ ...ancForm, title: e.target.value })}
+              className="w-full p-2.5 border rounded-xl font-bold"
+            />
+            <textarea
+              rows={2}
+              placeholder="Detailed Announcement Message..."
+              required
+              value={ancForm.message}
+              onChange={(e) => setAncForm({ ...ancForm, message: e.target.value })}
+              className="w-full p-2.5 border rounded-xl"
+            />
+            <input
+              type="text"
+              placeholder="Badge Label (e.g. SEASON UPDATE)..."
+              value={ancForm.badge}
+              onChange={(e) => setAncForm({ ...ancForm, badge: e.target.value })}
+              className="w-full p-2.5 border rounded-xl"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowAncModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-forest-900 text-white font-bold rounded-xl">Save Banner</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* PROMO OFFER MODAL */}
+      {showOfferModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleSaveOffer} className="bg-white rounded-3xl p-6 max-w-md w-full space-y-3 text-xs">
+            <h3 className="font-bold text-base text-slate-900">Add Promotional Offer</h3>
+            <input
+              type="text"
+              placeholder="Promo Code (e.g. KAGGADUGROUP5)..."
+              value={offerForm.code}
+              onChange={(e) => setOfferForm({ ...offerForm, code: e.target.value.toUpperCase() })}
+              className="w-full p-2.5 border rounded-xl font-mono font-bold"
+            />
+            <input
+              type="text"
+              placeholder="Offer Title..."
+              required
+              value={offerForm.title}
+              onChange={(e) => setOfferForm({ ...offerForm, title: e.target.value })}
+              className="w-full p-2.5 border rounded-xl font-bold"
+            />
+            <textarea
+              rows={2}
+              placeholder="Offer Description..."
+              required
+              value={offerForm.description}
+              onChange={(e) => setOfferForm({ ...offerForm, description: e.target.value })}
+              className="w-full p-2.5 border rounded-xl"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowOfferModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-forest-900 text-white font-bold rounded-xl">Save Offer</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* USER STAFF MODAL */}
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleSaveUser} className="bg-white rounded-3xl p-6 max-w-md w-full space-y-3 text-xs">
+            <h3 className="font-bold text-base text-slate-900">Add Staff Member</h3>
+            <input
+              type="text"
+              placeholder="Staff Full Name..."
+              required
+              value={userForm.name}
+              onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+              className="w-full p-2.5 border rounded-xl font-bold"
+            />
+            <input
+              type="email"
+              placeholder="Staff Email Address..."
+              required
+              value={userForm.email}
+              onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+              className="w-full p-2.5 border rounded-xl font-medium"
+            />
+            <select
+              value={userForm.role}
+              onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+              className="w-full p-2.5 border rounded-xl font-semibold"
+            >
+              <option value="Super Admin">Super Admin</option>
+              <option value="Trek Lead Coordinator">Trek Lead Coordinator</option>
+              <option value="Support Agent">Support Agent</option>
+            </select>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowUserModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-bold">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-forest-900 text-white font-bold rounded-xl">Save User</button>
             </div>
           </form>
         </div>

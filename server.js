@@ -594,10 +594,147 @@ apiRouter.delete('/faqs/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// --- NOTIFICATIONS ---
-apiRouter.get('/notifications', (req, res) => {
+// --- ANNOUNCEMENTS ---
+apiRouter.get('/announcements', (req, res) => {
   const db = readDB();
-  res.json(db.notifications || []);
+  const list = db.announcements || [];
+  const { activeOnly } = req.query;
+  if (activeOnly === 'true') {
+    return res.json(list.filter(a => a.active));
+  }
+  res.json(list);
+});
+
+apiRouter.post('/announcements', (req, res) => {
+  const db = readDB();
+  const newItem = {
+    id: 'anc-' + Date.now(),
+    active: true,
+    createdAt: new Date().toISOString(),
+    ...req.body
+  };
+  db.announcements.unshift(newItem);
+  db.activityLogs.unshift({
+    id: 'log-' + Date.now(),
+    action: 'Announcement Created',
+    details: `Created announcement: ${newItem.title}`,
+    timestamp: new Date().toISOString()
+  });
+  writeDB(db);
+  res.status(201).json(newItem);
+});
+
+apiRouter.put('/announcements/:id', (req, res) => {
+  const db = readDB();
+  const idx = (db.announcements || []).findIndex(a => a.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ message: 'Announcement not found' });
+  db.announcements[idx] = { ...db.announcements[idx], ...req.body };
+  writeDB(db);
+  res.json(db.announcements[idx]);
+});
+
+apiRouter.delete('/announcements/:id', (req, res) => {
+  const db = readDB();
+  db.announcements = (db.announcements || []).filter(a => a.id !== req.params.id);
+  writeDB(db);
+  res.json({ success: true });
+});
+
+// --- OFFERS ---
+apiRouter.get('/offers', (req, res) => {
+  const db = readDB();
+  const list = db.offers || [];
+  const { activeOnly } = req.query;
+  if (activeOnly === 'true') {
+    return res.json(list.filter(o => o.active));
+  }
+  res.json(list);
+});
+
+apiRouter.post('/offers', (req, res) => {
+  const db = readDB();
+  const newItem = {
+    id: 'off-' + Date.now(),
+    active: true,
+    createdAt: new Date().toISOString(),
+    ...req.body
+  };
+  db.offers.unshift(newItem);
+  db.activityLogs.unshift({
+    id: 'log-' + Date.now(),
+    action: 'Offer Created',
+    details: `Created promo offer: ${newItem.code || newItem.title}`,
+    timestamp: new Date().toISOString()
+  });
+  writeDB(db);
+  res.status(201).json(newItem);
+});
+
+apiRouter.delete('/offers/:id', (req, res) => {
+  const db = readDB();
+  db.offers = (db.offers || []).filter(o => o.id !== req.params.id);
+  writeDB(db);
+  res.json({ success: true });
+});
+
+// --- ACTIVITY LOGS ---
+apiRouter.get('/activity-logs', (req, res) => {
+  const db = readDB();
+  res.json((db.activityLogs || []).slice(0, 50));
+});
+
+// --- USER MANAGEMENT ---
+apiRouter.get('/users', (req, res) => {
+  const db = readDB();
+  res.json(db.users || []);
+});
+
+apiRouter.post('/users', (req, res) => {
+  const db = readDB();
+  const newUser = {
+    id: 'usr-' + Date.now(),
+    createdAt: new Date().toISOString(),
+    ...req.body
+  };
+  db.users.push(newUser);
+  writeDB(db);
+  res.status(201).json(newUser);
+});
+
+apiRouter.delete('/users/:id', (req, res) => {
+  const db = readDB();
+  db.users = (db.users || []).filter(u => u.id !== req.params.id);
+  writeDB(db);
+  res.json({ success: true });
+});
+
+// --- BOOKINGS CSV EXPORT ---
+apiRouter.get('/bookings/export', (req, res) => {
+  const db = readDB();
+  const bookings = db.bookings || [];
+
+  const headers = ['Booking ID', 'Lead Name', 'Phone', 'WhatsApp', 'Email', 'Trek Name', 'Batch Date', 'Trekkers Count', 'Total Amount (INR)', 'Payment Status', 'Status', 'Txn ID', 'Pickup Location', 'Created At'];
+  const rows = bookings.map(b => [
+    `"${b.id || ''}"`,
+    `"${b.fullName || ''}"`,
+    `"${b.phone || ''}"`,
+    `"${b.whatsapp || ''}"`,
+    `"${b.email || ''}"`,
+    `"${b.trekName || ''}"`,
+    `"${b.batchDate || ''}"`,
+    b.participantsCount || 1,
+    b.totalAmount || 0,
+    `"${b.paymentStatus || 'Pending'}"`,
+    `"${b.status || 'Pending'}"`,
+    `"${b.phonepeTransactionId || b.transactionId || 'N/A'}"`,
+    `"${b.pickupLocation || ''}"`,
+    `"${b.createdAt || ''}"`
+  ]);
+
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=kaggadu_bookings_export.csv');
+  return res.status(200).send(csvContent);
 });
 
 // Mount router under BOTH /api and / so Vercel Serverless Function rewrites match 100% of requests!

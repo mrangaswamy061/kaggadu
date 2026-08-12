@@ -8,13 +8,42 @@ import { TrekCardSkeleton } from '../components/SkeletonLoader';
 export default function HomePage({ searchQuery, setSearchQuery }) {
   const [treks, setTreks] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [offers, setOffers] = useState([]);
   const [activeCategory, setActiveCategory] = useState('All');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchTreks();
     fetchReviews();
+    fetchAnnouncements();
+    fetchOffers();
+
+    // Auto-polling every 15s for live real-time updates from Admin Panel
+    const timer = setInterval(() => {
+      fetchTreks();
+      fetchAnnouncements();
+      fetchOffers();
+    }, 15000);
+
+    return () => clearInterval(timer);
   }, [activeCategory, searchQuery]);
+
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await fetch('/api/announcements?activeOnly=true');
+      const data = await res.json();
+      setAnnouncements(data || []);
+    } catch (e) {}
+  };
+
+  const fetchOffers = async () => {
+    try {
+      const res = await fetch('/api/offers?activeOnly=true');
+      const data = await res.json();
+      setOffers(data || []);
+    } catch (e) {}
+  };
 
   const fetchTreks = async () => {
     setLoading(true);
@@ -62,10 +91,36 @@ export default function HomePage({ searchQuery, setSearchQuery }) {
   };
 
   return (
-    <div className="space-y-10 md:space-y-16">
+    <div className="space-y-6 md:space-y-12">
       
+      {/* 0. DYNAMIC ANNOUNCEMENT BANNERS */}
+      {announcements.length > 0 && (
+        <div className="space-y-2 max-w-7xl mx-auto px-4 pt-2">
+          {announcements.map((anc) => (
+            <div
+              key={anc.id}
+              className="bg-gradient-to-r from-emerald-900 via-forest-900 to-emerald-950 text-white p-3.5 rounded-2xl shadow-sm border border-emerald-500/30 flex items-center justify-between gap-3 text-xs animate-fade-in"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="bg-emerald-400 text-forest-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                  {anc.badge || 'UPDATE'}
+                </span>
+                <span className="font-extrabold text-slate-100">{anc.title}</span>
+                <span className="hidden sm:inline text-slate-300">• {anc.message}</span>
+              </div>
+              {anc.link && (
+                <Link href={anc.link} className="px-3 py-1 bg-white/10 hover:bg-white/20 text-emerald-300 font-bold text-[11px] rounded-lg shrink-0 flex items-center gap-1">
+                  <span>View</span>
+                  <ArrowRight className="w-3 h-3" />
+                </Link>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 1. HERO SECTION */}
-      <section className="relative min-h-[85vh] flex items-center justify-center rounded-b-[2.5rem] overflow-hidden -mt-4 bg-forest-950 text-white px-4">
+      <section className="relative min-h-[80vh] flex items-center justify-center rounded-b-[2.5rem] overflow-hidden -mt-2 bg-forest-950 text-white px-4">
         {/* Background Image with Overlay */}
         <img
           src="/images/hero_western_ghats.jpg"
@@ -124,6 +179,31 @@ export default function HomePage({ searchQuery, setSearchQuery }) {
           </div>
         </div>
       </section>
+
+      {/* DYNAMIC PROMOTIONAL OFFERS & DISCOUNTS */}
+      {offers.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {offers.map((off) => (
+              <div key={off.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    {off.discount || 'LIMITED OFFER'}
+                  </span>
+                  <h3 className="font-extrabold text-sm text-slate-900">{off.title}</h3>
+                  <p className="text-xs text-slate-500">{off.description}</p>
+                </div>
+                {off.code && (
+                  <div className="bg-earth-50 border border-slate-300 p-2.5 rounded-2xl text-center shrink-0">
+                    <span className="text-[9px] font-extrabold text-slate-400 block uppercase">USE CODE</span>
+                    <span className="font-mono text-xs font-black text-forest-900 tracking-wider">{off.code}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 2. QUICK TREK SEARCH & FILTER CHIPS */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

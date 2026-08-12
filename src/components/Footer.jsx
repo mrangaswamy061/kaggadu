@@ -1,8 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { Phone, Mail, Instagram, MessageCircle, Heart } from 'lucide-react';
 
 export default function Footer() {
+  const [settings, setSettings] = useState({
+    phone: '7760013106',
+    trekLeadPhone: '9353772729',
+    email: 'kaggadu@gmail.com',
+    instagram: '@kaggadu_adventures',
+    instagramUrl: 'https://instagram.com/kaggadu_adventures',
+    whatsappNumber: '917760013106'
+  });
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.phone) {
+          setSettings(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <footer className="bg-forest-950 text-white pt-12 pb-24 md:pb-12 border-t border-forest-900 mt-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -37,50 +57,58 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Contact Details */}
+          {/* Dynamic Contact Details */}
           <div className="space-y-2">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400">Contact Us</h4>
             <ul className="space-y-2 text-xs text-slate-300">
               <li className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                <a href="tel:7760013106" className="hover:text-white">7760013106</a>
+                <a href={`tel:${settings.phone}`} className="hover:text-white">{settings.phone}</a>
                 <span className="text-[10px] text-slate-400">(Main Line)</span>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                <a href="tel:9353772729" className="hover:text-white">9353772729</a>
+                <a href={`tel:${settings.trekLeadPhone}`} className="hover:text-white">{settings.trekLeadPhone}</a>
                 <span className="text-[10px] text-slate-400">(Trek Lead)</span>
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-emerald-400" />
-                <a href="mailto:kaggadu@gmail.com" className="hover:text-white">kaggadu@gmail.com</a>
+                <a href={`mailto:${settings.email}`} className="hover:text-white">{settings.email}</a>
               </li>
               <li className="flex items-center gap-2">
                 <Instagram className="w-3.5 h-3.5 text-emerald-400" />
-                <a href="https://instagram.com/kaggadu_adventures" target="_blank" rel="noreferrer" className="hover:text-white">@kaggadu_adventures</a>
+                <a href={settings.instagramUrl || 'https://instagram.com/kaggadu_adventures'} target="_blank" rel="noreferrer" className="hover:text-white">
+                  {settings.instagram || '@kaggadu_adventures'}
+                </a>
               </li>
             </ul>
           </div>
 
-          {/* Legal & Policies */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400">Policies</h4>
-            <ul className="space-y-1.5 text-xs text-slate-300">
-              <li><a href="#" className="hover:text-white">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-white">Terms & Conditions</a></li>
-              <li><a href="#" className="hover:text-white">Cancellation Policy</a></li>
-              <li><a href="#" className="hover:text-white">Safety Guidelines</a></li>
-            </ul>
+          {/* WhatsApp Direct CTA */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400">WhatsApp Support</h4>
+            <p className="text-xs text-slate-300">Have questions about trek dates or homestay food? Reach out anytime!</p>
+            <a
+              href={`https://wa.me/${settings.whatsappNumber || '917760013106'}?text=Hi%20Kaggadu%20Adventures%2C%20I%20have%20a%20question`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md"
+            >
+              <MessageCircle className="w-4 h-4 fill-white" />
+              <span>CHAT ON WHATSAPP</span>
+            </a>
           </div>
 
         </div>
 
-        {/* Bottom Copyright Bar */}
-        <div className="pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
-          <span>© 2020 Kaggadu Adventures. All Rights Reserved.</span>
-          <span className="flex items-center gap-1">
-            Made with <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /> for Karnataka Trekkers
-          </span>
+        {/* Copyright */}
+        <div className="border-t border-forest-900 pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-3">
+          <p>© {new Date().getFullYear()} KAGGADU ADVENTURES. All rights reserved.</p>
+          <div className="flex items-center gap-1 text-[11px]">
+            <span>Crafted with</span>
+            <Heart className="w-3 h-3 text-rose-500 fill-rose-500" />
+            <span>for Karnataka Trekkers</span>
+          </div>
         </div>
 
       </div>
