@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRoute, useLocation, Link } from 'wouter';
-import { Check, ShieldCheck, ArrowRight, ArrowLeft, Copy, Upload, AlertCircle, Sparkles, Phone, User, Users, MapPin, CreditCard } from 'lucide-react';
+import { Check, ShieldCheck, ArrowRight, ArrowLeft, Copy, Upload, AlertCircle, Sparkles, Phone, User, Users, MapPin, CreditCard, Lock, CheckCircle2, QrCode, Smartphone } from 'lucide-react';
 import { compressImage } from '../utils/imageCompressor.js';
 
 export default function BookingPage() {
@@ -28,7 +28,8 @@ export default function BookingPage() {
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [specialNotes, setSpecialNotes] = useState('');
 
-  // Payment Upload State
+  // Payment Options
+  const [paymentMode, setPaymentMode] = useState('PHONEPE'); // 'PHONEPE' or 'MANUAL_UPI'
   const [uploading, setUploading] = useState(false);
   const [screenshotUrl, setScreenshotUrl] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
@@ -108,6 +109,7 @@ export default function BookingPage() {
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
+  // Submit Booking & Trigger PhonePe Payment
   const handleSubmitBooking = async (e) => {
     e.preventDefault();
     if (!fullName || !phone || !whatsapp) {
@@ -117,6 +119,7 @@ export default function BookingPage() {
 
     setSubmitting(true);
     setErrorMsg('');
+
     try {
       const payload = {
         trekId: trek.id,
@@ -135,24 +138,53 @@ export default function BookingPage() {
         participantsCount: parseInt(participantsCount),
         specialNotes,
         totalAmount: totalPrice,
+        paymentGateway: paymentMode === 'PHONEPE' ? 'PhonePe' : 'Manual UPI',
         paymentScreenshot: screenshotUrl
       };
 
+      // 1. Save Initial Booking Record
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
-      if (data.id) {
-        navigate(`/booking-confirmation/${data.id}`);
-      } else {
-        setErrorMsg('Booking creation failed. Please try again.');
+      const booking = await res.json();
+
+      if (!booking?.id) {
+        setErrorMsg('Failed to process booking. Please try again.');
+        setSubmitting(false);
+        return;
       }
+
+      // 2. If Payment Mode is PhonePe PG Gateway
+      if (paymentMode === 'PHONEPE') {
+        const phonepeRes = await fetch('/api/payment/phonepe/initiate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingId: booking.id,
+            amount: totalPrice,
+            fullName,
+            phone,
+            email
+          })
+        });
+
+        const phonepeData = await phonepeRes.json();
+
+        if (phonepeData.redirectUrl) {
+          // Redirect to PhonePe Checkout Page
+          window.location.href = phonepeData.redirectUrl;
+          return;
+        }
+      }
+
+      // 3. Fallback / Direct Confirmation
+      navigate(`/booking-confirmation/${booking.id}`);
     } catch (err) {
       console.error('Booking submission error:', err);
-      setErrorMsg('Failed to process booking. Please contact support.');
+      setErrorMsg('Failed to process booking. Please check network connection.');
     } finally {
       setSubmitting(false);
     }
@@ -174,17 +206,17 @@ export default function BookingPage() {
       <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-2 border-b border-slate-200">
         <div className={`flex items-center gap-1.5 ${step >= 1 ? 'text-forest-800' : ''}`}>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${step >= 1 ? 'bg-forest-900 text-white' : 'bg-slate-200'}`}>1</span>
-          <span className="hidden sm:inline">Batch</span>
+          <span className="hidden sm:inline">Batch & Count</span>
         </div>
         <div className="h-0.5 w-6 bg-slate-200" />
         <div className={`flex items-center gap-1.5 ${step >= 2 ? 'text-forest-800' : ''}`}>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${step >= 2 ? 'bg-forest-900 text-white' : 'bg-slate-200'}`}>2</span>
-          <span className="hidden sm:inline">Details</span>
+          <span className="hidden sm:inline">Participant Info</span>
         </div>
         <div className="h-0.5 w-6 bg-slate-200" />
         <div className={`flex items-center gap-1.5 ${step >= 3 ? 'text-forest-800' : ''}`}>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${step >= 3 ? 'bg-forest-900 text-white' : 'bg-slate-200'}`}>3</span>
-          <span className="hidden sm:inline">Payment</span>
+          <span className="hidden sm:inline">PhonePe Checkout</span>
         </div>
       </div>
 
@@ -218,66 +250,73 @@ export default function BookingPage() {
                   >
                     <div>
                       <span className="font-bold text-xs text-slate-900 block">{b.startDate} to {b.endDate}</span>
-                      <span className="text-[10px] text-slate-500">₹{b.price} / person</span>
+                      <span className="text-[10px] text-slate-500 font-medium">₹{b.price || trek?.price} / person</span>
                     </div>
-                    {isFull ? (
-                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">FULL</span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">{available} seats left</span>
-                    )}
+                    <div>
+                      {isFull ? (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold text-[10px] uppercase">BATCH FULL</span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">
+                          {available} Seats Available
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Number of Participants */}
-          <div className="space-y-2">
-            <label className="text-xs font-extrabold text-slate-800 block">Number of Participants</label>
+          {/* Participants Counter */}
+          <div className="bg-earth-50 p-4 rounded-2xl border border-slate-200/80 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-extrabold text-slate-900 block">Number of Trekkers</span>
+              <span className="text-[10px] text-slate-500">Group discount automatically applied</span>
+            </div>
             <div className="flex items-center gap-3">
-              {[1, 2, 3, 4, 5].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => setParticipantsCount(num)}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition-all ${
-                    participantsCount === num
-                      ? 'bg-forest-900 text-white shadow-md'
-                      : 'bg-earth-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {num} {num === 1 ? 'Person' : 'People'}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => setParticipantsCount(Math.max(1, participantsCount - 1))}
+                className="w-9 h-9 rounded-xl bg-white border border-slate-300 font-black text-slate-700 flex items-center justify-center hover:bg-slate-100 active:scale-95"
+              >
+                -
+              </button>
+              <span className="font-black text-base text-forest-900 w-6 text-center">{participantsCount}</span>
+              <button
+                type="button"
+                onClick={() => setParticipantsCount(participantsCount + 1)}
+                className="w-9 h-9 rounded-xl bg-white border border-slate-300 font-black text-slate-700 flex items-center justify-center hover:bg-slate-100 active:scale-95"
+              >
+                +
+              </button>
             </div>
           </div>
 
-          {/* Pickup Location */}
-          {currentBatch?.pickupPoints && (
-            <div className="space-y-2">
-              <label className="text-xs font-extrabold text-slate-800 block">Pickup Location (Bengaluru)</label>
-              <select
-                value={pickupLocation}
-                onChange={(e) => setPickupLocation(e.target.value)}
-                className="w-full bg-earth-50 border border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-800 focus:outline-none"
-              >
-                {currentBatch.pickupPoints.map((loc, idx) => (
-                  <option key={idx} value={loc}>{loc}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Pickup Point Selection */}
+          <div className="space-y-2">
+            <label className="text-xs font-extrabold text-slate-800 block">Select Bengaluru Pickup Point</label>
+            <select
+              value={pickupLocation}
+              onChange={(e) => setPickupLocation(e.target.value)}
+              className="w-full p-3 bg-earth-50 border border-slate-200 rounded-xl text-xs font-semibold"
+            >
+              {(currentBatch?.pickupPoints || ['Indiranagar (10:00 PM)', 'Yeshwanthpur (11:00 PM)', 'Goraguntepalya (11:15 PM)']).map((p, idx) => (
+                <option key={idx} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
 
-          {/* Summary Price */}
-          <div className="bg-forest-900 text-white p-4 rounded-2xl flex items-center justify-between">
+          {/* Price Summary Calculation */}
+          <div className="bg-forest-950 text-white p-4 rounded-2xl flex items-center justify-between">
             <div>
-              <span className="text-[10px] text-slate-300 uppercase font-semibold block">Total Amount</span>
-              <span className="text-xs text-emerald-300">₹{unitPrice} x {participantsCount} participant(s)</span>
+              <span className="text-[10px] uppercase font-bold text-emerald-400 block">Calculated Total</span>
+              <span className="text-xs text-slate-300">₹{unitPrice} × {participantsCount} participant(s)</span>
             </div>
-            <span className="text-xl font-black text-white">₹{totalPrice.toLocaleString()}</span>
+            <span className="text-2xl font-black text-emerald-300">₹{totalPrice.toLocaleString()}</span>
           </div>
 
           <button
+            type="button"
             onClick={() => setStep(2)}
             className="w-full py-3.5 bg-forest-900 hover:bg-forest-800 active:scale-95 text-white font-extrabold text-xs tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
           >
@@ -293,9 +332,9 @@ export default function BookingPage() {
           <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold text-forest-700 uppercase tracking-wider block">Step 2 of 3</span>
-              <h2 className="text-lg font-black text-slate-900">Participant Details</h2>
+              <h2 className="text-lg font-black text-slate-900">Participant Info</h2>
             </div>
-            <button onClick={() => setStep(1)} className="text-xs text-slate-500 underline">Back</button>
+            <button type="button" onClick={() => setStep(1)} className="text-xs text-slate-500 underline font-semibold">Back</button>
           </div>
 
           {errorMsg && (
@@ -401,27 +440,18 @@ export default function BookingPage() {
                 />
               </div>
             </div>
-
-            <div className="pt-2">
-              <label className="font-bold text-slate-800 block mb-1">Special Requirements / Medical Notes (Optional)</label>
-              <textarea
-                rows={2}
-                placeholder="Vegetarian preference, allergies, etc."
-                value={specialNotes}
-                onChange={(e) => setSpecialNotes(e.target.value)}
-                className="w-full p-3 bg-earth-50 border border-slate-200 rounded-xl font-medium focus:outline-none"
-              />
-            </div>
           </div>
 
           <div className="flex gap-3 pt-3">
             <button
+              type="button"
               onClick={() => setStep(1)}
               className="w-1/3 py-3 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl"
             >
               BACK
             </button>
             <button
+              type="button"
               onClick={() => {
                 if (!fullName || !phone || !whatsapp) {
                   setErrorMsg('Full Name, Phone, and WhatsApp are required!');
@@ -439,15 +469,15 @@ export default function BookingPage() {
         </div>
       )}
 
-      {/* STEP 3: PAYMENT & CONFIRMATION SUBMISSION */}
+      {/* STEP 3: PHONEPE CHECKOUT & SUBMIT */}
       {step === 3 && (
         <form onSubmit={handleSubmitBooking} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5 animate-fade-in">
           <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold text-forest-700 uppercase tracking-wider block">Step 3 of 3</span>
-              <h2 className="text-lg font-black text-slate-900">Payment & Submit</h2>
+              <h2 className="text-lg font-black text-slate-900">PhonePe Checkout</h2>
             </div>
-            <button type="button" onClick={() => setStep(2)} className="text-xs text-slate-500 underline">Edit Details</button>
+            <button type="button" onClick={() => setStep(2)} className="text-xs text-slate-500 underline font-semibold">Edit Info</button>
           </div>
 
           {errorMsg && (
@@ -457,12 +487,12 @@ export default function BookingPage() {
             </div>
           )}
 
-          {/* Amount Due Card */}
-          <div className="bg-forest-900 text-white p-5 rounded-2xl space-y-2">
-            <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Total Booking Amount</span>
+          {/* Calculated Amount Due Card */}
+          <div className="bg-forest-950 text-white p-5 rounded-2xl space-y-2">
+            <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider block">Total Amount Due</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black">₹{totalPrice.toLocaleString()}</span>
-              <span className="text-xs text-slate-300">for {participantsCount} participant(s)</span>
+              <span className="text-3xl font-black text-emerald-300">₹{totalPrice.toLocaleString()}</span>
+              <span className="text-xs text-slate-300 font-semibold">{participantsCount} Trekker(s)</span>
             </div>
             <div className="text-[11px] text-slate-300 border-t border-white/10 pt-2 flex justify-between">
               <span>{trek.name}</span>
@@ -470,60 +500,100 @@ export default function BookingPage() {
             </div>
           </div>
 
-          {/* UPI Payment Instructions */}
-          <div className="bg-earth-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-            <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">UPI / GPay / PhonePe Payment</h4>
+          {/* Payment Method Selector */}
+          <div className="space-y-3">
+            <label className="text-xs font-extrabold text-slate-900 block uppercase tracking-wider">Select Payment Method</label>
             
-            <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
-              <div>
-                <span className="text-[10px] text-slate-400 font-semibold block">KAGGADU OFFICIAL UPI ID</span>
-                <span className="font-mono text-xs font-bold text-forest-900">{settings.upiId || '7760013106@ybl'}</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCopyUPI}
-                className="px-3 py-1.5 bg-forest-100 text-forest-900 hover:bg-forest-200 font-bold text-[11px] rounded-lg flex items-center gap-1"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>{copySuccess ? 'Copied!' : 'Copy UPI'}</span>
-              </button>
-            </div>
-
-            <p className="text-[11px] text-slate-600 whitespace-pre-line leading-relaxed">
-              {settings.paymentInstructions || 'Pay via GooglePay/PhonePe to 7760013106 and upload screenshot below.'}
-            </p>
-          </div>
-
-          {/* Payment Screenshot Upload */}
-          <div className="space-y-2">
-            <label className="text-xs font-extrabold text-slate-800 block">
-              Upload Payment Screenshot (Optional / Quick Approval)
-            </label>
-            <div className="border-2 border-dashed border-slate-300 hover:border-forest-700 rounded-2xl p-4 text-center bg-earth-50/50">
-              {screenshotUrl ? (
-                <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-emerald-300">
-                  <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    Screenshot Attached
-                  </span>
-                  <button type="button" onClick={() => setScreenshotUrl('')} className="text-xs text-rose-600 underline">
-                    Remove
-                  </button>
+            {/* Mode 1: PhonePe Direct Checkout */}
+            <div
+              onClick={() => setPaymentMode('PHONEPE')}
+              className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                paymentMode === 'PHONEPE'
+                  ? 'bg-purple-50/80 border-purple-600 ring-2 ring-purple-600'
+                  : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-lg">
+                  🪪
                 </div>
-              ) : (
-                <label className="cursor-pointer flex flex-col items-center gap-1">
-                  <Upload className="w-6 h-6 text-slate-400" />
-                  <span className="text-xs font-bold text-forest-900">
-                    {uploading ? 'Uploading...' : 'Tap to select payment screenshot'}
-                  </span>
-                  <span className="text-[10px] text-slate-400">JPG, PNG up to 5MB</span>
-                  <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                </label>
-              )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-sm text-slate-900">PhonePe Checkout</span>
+                    <span className="bg-purple-100 text-purple-800 text-[9px] font-black px-2 py-0.2 rounded-full uppercase">Official PG</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Pay via PhonePe, GPay, Paytm, Cards, or NetBanking</p>
+                </div>
+              </div>
+              <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMode === 'PHONEPE' ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
+                {paymentMode === 'PHONEPE' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              </div>
+            </div>
+
+            {/* Mode 2: Instant UPI QR & Screenshot */}
+            <div
+              onClick={() => setPaymentMode('MANUAL_UPI')}
+              className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                paymentMode === 'MANUAL_UPI'
+                  ? 'bg-emerald-50/80 border-emerald-600 ring-2 ring-emerald-600'
+                  : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-lg">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-sm text-slate-900">Direct UPI ID / QR</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Copy UPI ID ({settings.upiId || '7760013106@ybl'}) & attach proof</p>
+                </div>
+              </div>
+              <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMode === 'MANUAL_UPI' ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300'}`}>
+                {paymentMode === 'MANUAL_UPI' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              </div>
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Conditional Manual UPI Container */}
+          {paymentMode === 'MANUAL_UPI' && (
+            <div className="bg-earth-50 p-4 rounded-2xl border border-slate-200 space-y-3 animate-fade-in text-xs">
+              <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-semibold block">KAGGADU UPI ID</span>
+                  <span className="font-mono text-xs font-bold text-forest-900">{settings.upiId || '7760013106@ybl'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyUPI}
+                  className="px-3 py-1.5 bg-forest-100 text-forest-900 hover:bg-forest-200 font-bold text-[11px] rounded-lg flex items-center gap-1"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copySuccess ? 'Copied!' : 'Copy UPI'}</span>
+                </button>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">Attach Payment Screenshot (Optional)</label>
+                <div className="border border-slate-300 rounded-xl p-3 bg-white text-center">
+                  {screenshotUrl ? (
+                    <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
+                      <span>✓ Proof Attached</span>
+                      <button type="button" onClick={() => setScreenshotUrl('')} className="text-rose-600 underline">Remove</button>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer text-slate-600 hover:text-forest-900 font-bold text-xs block">
+                      {uploading ? 'Compressing & Uploading...' : 'Tap to Select Screenshot'}
+                      <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Submit Action Buttons */}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -535,13 +605,22 @@ export default function BookingPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-2/3 py-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+              className={`w-2/3 py-3.5 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+                paymentMode === 'PHONEPE'
+                  ? 'bg-purple-700 hover:bg-purple-600 shadow-purple-700/20'
+                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+              }`}
             >
               {submitting ? (
-                <span>CONFIRMING BOOKING...</span>
+                <span>PROCESSING...</span>
+              ) : paymentMode === 'PHONEPE' ? (
+                <>
+                  <span>PAY NOW WITH PHONEPE</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
               ) : (
                 <>
-                  <span>CONFIRM BOOKING</span>
+                  <span>CONFIRM & BOOK TREK</span>
                   <Check className="w-4 h-4" />
                 </>
               )}

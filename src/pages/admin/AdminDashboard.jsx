@@ -21,6 +21,8 @@ export default function AdminDashboard() {
   const [faqs, setFaqs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [settings, setSettings] = useState({});
+  const [financials, setFinancials] = useState(null);
+  const [verifyingTxnId, setVerifyingTxnId] = useState('');
   
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -110,7 +112,7 @@ export default function AdminDashboard() {
   const fetchAdminData = async () => {
     setLoading(true);
     try {
-      const [bRes, tRes, btRes, gRes, eRes, rRes, fRes, nRes, sRes] = await Promise.all([
+      const [bRes, tRes, btRes, gRes, eRes, rRes, fRes, nRes, sRes, finRes] = await Promise.all([
         fetch('/api/bookings'),
         fetch('/api/treks'),
         fetch('/api/batches'),
@@ -119,7 +121,8 @@ export default function AdminDashboard() {
         fetch('/api/reviews'),
         fetch('/api/faqs'),
         fetch('/api/notifications'),
-        fetch('/api/settings')
+        fetch('/api/settings'),
+        fetch('/api/admin/financials')
       ]);
 
       setBookings(await bRes.json());
@@ -131,10 +134,37 @@ export default function AdminDashboard() {
       setFaqs(await fRes.json());
       setNotifications(await nRes.json());
       setSettings(await sRes.json());
+      setFinancials(await finRes.json());
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerifyPhonePeTxn = async (txnId, bookingId) => {
+    if (!txnId || txnId === 'N/A') {
+      alert('No PhonePe Transaction ID associated with this booking.');
+      return;
+    }
+    setVerifyingTxnId(txnId);
+    try {
+      const res = await fetch(`/api/payment/phonepe/verify/${txnId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId })
+      });
+      const data = await res.json();
+      if (data.verification?.isPaid) {
+        alert(`✓ PhonePe Verified: Payment COMPLETED! Booking status updated to PAID & APPROVED.`);
+      } else {
+        alert(`PhonePe Check: ${data.verification?.message || 'Payment not completed yet.'}`);
+      }
+      fetchAdminData();
+    } catch (err) {
+      alert('Verification request failed: ' + err.message);
+    } finally {
+      setVerifyingTxnId('');
     }
   };
 
@@ -417,6 +447,7 @@ export default function AdminDashboard() {
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
         {[
           { id: 'bookings', label: 'Bookings', badge: pendingBookingsCount },
+          { id: 'financials', label: '💰 Payments & Revenue' },
           { id: 'treks', label: 'Treks' },
           { id: 'batches', label: 'Batches' },
           { id: 'gallery', label: 'Gallery' },
@@ -548,6 +579,122 @@ export default function AdminDashboard() {
                   ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: FINANCIALS & PHONEPE PAYMENTS */}
+      {activeTab === 'financials' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Key Metric Stat Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-emerald-900 to-forest-950 text-white p-5 rounded-3xl space-y-1 shadow-md">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 block">Total Revenue Collected</span>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-300">
+                ₹{financials?.totalRevenue?.toLocaleString() || 0}
+              </div>
+              <span className="text-[10px] text-slate-300 block pt-1">From {financials?.paidBookingsCount || 0} verified bookings</span>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 block">Pending Payments</span>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900">
+                ₹{financials?.pendingAmount?.toLocaleString() || 0}
+              </div>
+              <span className="text-[10px] text-slate-500 block pt-1">{financials?.pendingBookingsCount || 0} bookings awaiting payment</span>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 block">Total Paid Trekkers</span>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900">
+                {financials?.totalParticipants || 0}
+              </div>
+              <span className="text-[10px] text-slate-500 block pt-1">Confirmed participants</span>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">Avg Order Value (AOV)</span>
+              <div className="text-2xl sm:text-3xl font-black text-forest-900">
+                ₹{financials?.averageOrderValue?.toLocaleString() || 0}
+              </div>
+              <span className="text-[10px] text-slate-500 block pt-1">Per booking transaction</span>
+            </div>
+          </div>
+
+          {/* Transactions Table */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">PhonePe & Payment Audit Trail</h2>
+                <p className="text-xs text-slate-500">Live server-side PhonePe transaction verification & revenue reports</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-earth-50 text-slate-500 font-bold border-b border-slate-200">
+                    <th className="p-3">Booking ID</th>
+                    <th className="p-3">Participant</th>
+                    <th className="p-3">Trek & Batch</th>
+                    <th className="p-3">Amount</th>
+                    <th className="p-3">PhonePe Txn ID</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Server-Side Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(financials?.transactions || []).map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-50">
+                      <td className="p-3 font-mono font-black text-forest-900">{t.id}</td>
+                      <td className="p-3">
+                        <div className="font-bold text-slate-900">{t.fullName}</div>
+                        <div className="text-[10px] text-slate-500">{t.phone}</div>
+                      </td>
+                      <td className="p-3">
+                        <div className="font-semibold text-slate-800">{t.trekName}</div>
+                        <div className="text-[10px] text-slate-400">{t.batchDate}</div>
+                      </td>
+                      <td className="p-3 font-black text-forest-900">₹{t.totalAmount}</td>
+                      <td className="p-3">
+                        <span className="font-mono text-[10px] bg-slate-100 text-slate-800 px-2 py-0.5 rounded font-bold">
+                          {t.phonepeTransactionId}
+                        </span>
+                        <div className="text-[9px] text-slate-400">{t.paymentGateway} • {t.paymentInstrument}</div>
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
+                          t.paymentStatus === 'Paid' || t.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
+                          t.paymentStatus === 'Initiated' ? 'bg-purple-100 text-purple-900' :
+                          'bg-amber-100 text-amber-900'
+                        }`}>
+                          {t.paymentStatus}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleVerifyPhonePeTxn(t.phonepeTransactionId, t.id)}
+                            disabled={verifyingTxnId === t.phonepeTransactionId}
+                            className="px-2.5 py-1 bg-purple-700 hover:bg-purple-600 text-white font-bold text-[10px] rounded-lg shadow-sm"
+                          >
+                            {verifyingTxnId === t.phonepeTransactionId ? 'Verifying...' : 'Live Verify'}
+                          </button>
+                          <a
+                            href={`https://wa.me/91${t.whatsapp || t.phone}?text=Hi%20${encodeURIComponent(t.fullName)}%2C%20regarding%20your%20Kaggadu%20booking%20${t.id}%20(₹${t.totalAmount})...`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1 bg-emerald-100 text-emerald-800 rounded-lg"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

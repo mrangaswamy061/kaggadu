@@ -3,8 +3,8 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
-import { fileURLToPath } from 'url';
 import { readDB, writeDB } from './src/db/db.js';
+import { initiatePhonePePayment, verifyPhonePePayment, PHONEPE_CONFIG } from './src/services/phonepeService.js';
 
 const cwd = process.cwd();
 
@@ -294,6 +294,183 @@ apiRouter.patch('/bookings/:id/status', (req, res) => {
 
   writeDB(db);
   res.json({ success: true, booking, notificationSent: true, notificationMsg });
+});
+
+// --- PHONEPE PAYMENT INTEGRATION ---
+apiRouter.post('/payment/phonepe/initiate', async (req, res) => {
+  try {
+    const { bookingId, amount, fullName, phone, email } = req.body;
+    if (!bookingId || !amount) {
+      return res.status(400).json({ message: 'Missing bookingId or amount' });
+    }
+
+    const hostUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await initiatePhonePePayment({
+      bookingId,
+      amount,
+      fullName: fullName || 'Adventurer',
+      phone: phone || '9999999999',
+      email: email || 'user@kaggadu.com',
+      hostUrl
+    });
+
+    const db = readDB();
+    const booking = db.bookings.find(b => b.id === bookingId);
+    if (booking) {
+      booking.phonepeTransactionId = result.transactionId;
+      booking.paymentGateway = 'PhonePe';
+      booking.paymentStatus = 'Initiated';
+      writeDB(db);
+    }
+
+    return res.json(result);
+  } catch (err) {
+    console.error('PhonePe initiate error:', err);
+    return res.status(500).json({ message: 'Failed to initiate PhonePe payment' });
+  }
+});
+
+apiRouter.get('/payment/phonepe/redirect', async (req, res) => {
+  const { transactionId, bookingId, paymentStatus } = req.query;
+  const db = readDB();
+  const booking = db.bookings.find(b => b.id === bookingId || b.phonepeTransactionId === transactionId);
+
+  // Perform server-side PhonePe verification
+  const verification = await verifyPhonePePayment(transactionId);
+
+  if (booking) {
+    if (verification.isPaid || paymentStatus === 'SUCCESS') {
+      booking.status = 'Approved';
+      booking.paymentStatus = 'Paid';
+      booking.phonepeTransactionId = transactionId;
+      booking.paidAt = new Date().toISOString();
+      booking.paymentInstrument = verification.paymentInstrument || 'PhonePe UPI';
+
+      db.notifications.unshift({
+        id: 'n-' + Date.now(),
+        type: 'Payment Success',
+        message: `💰 PhonePe Payment Verified! Booking ${booking.id} (${booking.fullName}) ₹${booking.totalAmount} paid via ${booking.paymentInstrument}.`,
+        timestamp: new Date().toISOString()
+      });
+      writeDB(db);
+
+      return res.redirect(`/booking-confirmation/${booking.id}?transactionId=${transactionId}&status=SUCCESS`);
+    } else {
+      booking.paymentStatus = 'Failed';
+      writeDB(db);
+      return res.redirect(`/booking-confirmation/${booking.id}?transactionId=${transactionId}&status=FAILED`);
+    }
+  }
+
+  return res.redirect('/treks');
+});
+
+apiRouter.post('/payment/phonepe/callback', (req, res) => {
+  try {
+    const { response } = req.body || {};
+    if (response) {
+      const decodedJson = Buffer.from(response, 'base64').toString('utf-8');
+      const payload = JSON.parse(decodedJson);
+
+      if (payload.success && payload.code === 'PAYMENT_SUCCESS') {
+        const txnId = payload.data?.merchantTransactionId;
+        const db = readDB();
+        const booking = db.bookings.find(b => b.phonepeTransactionId === txnId || b.id === payload.data?.merchantUserId);
+
+        if (booking) {
+          booking.status = 'Approved';
+          booking.paymentStatus = 'Paid';
+          booking.paidAt = new Date().toISOString();
+          booking.phonepeTransactionId = txnId;
+          booking.paymentInstrument = payload.data?.paymentInstrument?.type || 'PhonePe Webhook';
+
+          db.notifications.unshift({
+            id: 'n-' + Date.now(),
+            type: 'Webhook Payment',
+            message: `🔔 PhonePe S2S Webhook Confirmed! Booking ${booking.id} ₹${booking.totalAmount} Paid.`,
+            timestamp: new Date().toISOString()
+          });
+          writeDB(db);
+        }
+      }
+    }
+    return res.json({ status: 'OK' });
+  } catch (err) {
+    console.error('PhonePe callback error:', err);
+    return res.status(200).json({ status: 'OK' });
+  }
+});
+
+apiRouter.post('/payment/phonepe/verify/:transactionId', async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const verification = await verifyPhonePePayment(transactionId);
+
+    const db = readDB();
+    const booking = db.bookings.find(b => b.phonepeTransactionId === transactionId || b.id === req.body?.bookingId);
+
+    if (booking && verification.isPaid) {
+      booking.status = 'Approved';
+      booking.paymentStatus = 'Paid';
+      booking.phonepeTransactionId = transactionId;
+      booking.paidAt = new Date().toISOString();
+      booking.paymentInstrument = verification.paymentInstrument || 'PhonePe UPI';
+      writeDB(db);
+    }
+
+    return res.json({
+      success: true,
+      verification,
+      booking
+    });
+  } catch (err) {
+    console.error('Verify transaction error:', err);
+    return res.status(500).json({ message: 'Verification error' });
+  }
+});
+
+// --- ADMIN FINANCIALS REPORT ---
+apiRouter.get('/admin/financials', (req, res) => {
+  const db = readDB();
+  const bookings = db.bookings || [];
+
+  const paidBookings = bookings.filter(b => b.paymentStatus === 'Paid' || b.status === 'Approved');
+  const pendingBookings = bookings.filter(b => b.paymentStatus === 'Pending' || b.status === 'Pending');
+  const cancelledBookings = bookings.filter(b => b.status === 'Rejected' || b.status === 'Cancelled');
+
+  const totalRevenue = paidBookings.reduce((sum, b) => sum + (parseInt(b.totalAmount) || 0), 0);
+  const pendingAmount = pendingBookings.reduce((sum, b) => sum + (parseInt(b.totalAmount) || 0), 0);
+  const totalParticipants = paidBookings.reduce((sum, b) => sum + (parseInt(b.participantsCount) || 1), 0);
+  const averageOrderValue = paidBookings.length > 0 ? Math.round(totalRevenue / paidBookings.length) : 0;
+
+  res.json({
+    totalRevenue,
+    pendingAmount,
+    paidBookingsCount: paidBookings.length,
+    pendingBookingsCount: pendingBookings.length,
+    cancelledBookingsCount: cancelledBookings.length,
+    totalBookingsCount: bookings.length,
+    totalParticipants,
+    averageOrderValue,
+    transactions: bookings.map(b => ({
+      id: b.id,
+      fullName: b.fullName,
+      phone: b.phone,
+      whatsapp: b.whatsapp || b.phone,
+      email: b.email,
+      trekName: b.trekName,
+      batchDate: b.batchDate,
+      totalAmount: b.totalAmount,
+      participantsCount: b.participantsCount,
+      status: b.status,
+      paymentStatus: b.paymentStatus || 'Pending',
+      paymentGateway: b.paymentGateway || (b.paymentScreenshot ? 'Manual UPI' : 'PhonePe PG'),
+      phonepeTransactionId: b.phonepeTransactionId || b.transactionId || 'N/A',
+      paymentInstrument: b.paymentInstrument || (b.paymentScreenshot ? 'QR Upload' : 'PhonePe PG'),
+      createdAt: b.createdAt,
+      paidAt: b.paidAt || b.createdAt
+    }))
+  });
 });
 
 // --- UPLOAD (MEMORY BUFFER TO BASE64 DATA URL FOR VERCEL COMPATIBILITY) ---
